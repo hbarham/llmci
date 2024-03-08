@@ -6,139 +6,99 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.keys import Keys
-
 import pyautogui
 import pygetwindow as gw
 from ultralytics import YOLO
 import cv2
 from PIL import ImageGrab, Image
-# from sort.sort import sort
-import numpy as np
 import easyocr
 import autogen
 from IPython import get_ipython
 import time
 from urllib.parse import urlparse
-from autogen import GroupChatManager, GroupChat
-
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+#from autogen import GroupChatManager, GroupChat
+# from sort.sort import sort
+# import numpy as np
+
+# ele_tracker = sort.Sort()
+# Run a default cuda device
 # torch.set_default_device("cuda")
 
 # Check if CUDA is available and use it if so
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-print(device)
-
-# Set GPU as the default device
+print("Device used:",device)
+# Set torch device
 torch.set_default_device(device)
-
-
-#Create model
+#Create imp vision model SMVM model
 model = AutoModelForCausalLM.from_pretrained(
 "MILVLG/imp-v1-3b", 
 torch_dtype=torch.float16, 
 device_map="auto",
 trust_remote_code=True)
-
-
-# ele_tracker = sort.Sort()
-
+tokenizer = AutoTokenizer.from_pretrained("MILVLG/imp-v1-3b", trust_remote_code=True)
+# Create OCR model
 reader = easyocr.Reader(['en'], gpu=True)
-
-# Your list of class names
+# YOLO model 'best.pt' classes
 class_names = ['Button', 'Edit Text', 'Header Bar', 'Image Button', 'Image View', 'Text Button', 'Text View']
-
-# Define a dictionary to map class IDs to class names
+# Define dictionary to map class IDs to class names
 class_id_to_name = {i: class_name for i, class_name in enumerate(class_names)}
-
+# Create the YOLO model
+modely = YOLO('best.pt')
 
 # Configure Chrome options with the temporary user data directory
-chrome_options = webdriver.ChromeOptions()
-chrome_options.add_argument("user-data-dir=C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data")
+# chrome_options = webdriver.ChromeOptions()
+# chrome_options.add_argument("user-data-dir=C:\\Users\\User\\AppData\\Local\\Google\\Chrome\\User Data")
 # Initialize the WebDriver with Chrome options
-driver = webdriver.Chrome(options=chrome_options)
+# driver = webdriver.Chrome(options=chrome_options)
 
-# Initialize webdriver (replace 'path_to_webdriver' with the actual path)
-# driver = webdriver.Chrome()
-
-
+# Initialize webdriver with default chrome withou user logging to chrome
+driver = webdriver.Chrome()
 # Set the window size (replace 'width' and 'height' with your desired values)
 driver.set_window_size(480, 800)
-
 # Set the window position (replace 'x' with the horizontal position you want)
 driver.set_window_position(0, 0)  # For example, position it to the right side of the screen
-
 # Navigate to Google and perform a search
 google_url = "https://www.google.com"
 driver.get(google_url)
 
 
-
-
+# Capture window screenshot
 def capture_window_screenshot():
-    # Get the position and size of the window
-    time.sleep(2)    
-    # Get the title of the opened window
     
+    time.sleep(1)       
     # Get the current window handle
     # swindow_title = driver.current_window_handle
-
     swindow_title = driver.title   
-
-
-    print(swindow_title)
-    
     window = gw.getWindowsWithTitle(swindow_title)
-
     if len(window) == 0:
         print(f"Window with title '{swindow_title}' not found.")
         return
+    time.sleep(1)
     
-
-    print('gww',window)
-
-    time.sleep(2)
-
-    print('00window', window[0])
-
+    # print('00window', window[0])
     # window[0].activate()
-    
     # Use pyautogui to activate the Chrome window by clicking its title in the taskbar
     #pyautogui.click(swindow_title)
+    # print('11window', window[0])
 
-    time.sleep(2)
-
-    print('11window', window[0])
-
+    # get the x,y coordinates of the window
     window = window[0]
     left, top, right, bottom = window.left, window.top, window.right, window.bottom
-    
-    # Capture the screenshot of the window
-    screenshot = ImageGrab.grab(bbox=(left, top+150, right, bottom))
-    
-    
+    # Capture a screenshot of the window
+    screenshot = ImageGrab.grab(bbox=(left, top+150, right, bottom))    
     # Save the screenshot to a file
     screenshot.save("./image/wss.png")
-
     time.sleep(1)
 
-    print(window)
-
-
-
-
+# Detect and return the element in the window
 def screeninfo():
     
-    # Get the title of the opened window
-    window_title = driver.title
-    
-    modely = YOLO('best.pt')
     # Load the image using OpenCV
     image_path = "./image/wss.png"
     img = cv2.imread(image_path)
-
-    # Run object detection and get the detections
+    # Run YOLO object detection and get the detections
     detections = modely(image_path)[0]
 
     # Draw bounding boxes on the image
@@ -152,7 +112,6 @@ def screeninfo():
 
     # Save the image with bounding boxes to a file
     cv2.imwrite('detected_image.jpg', img)
-
     # Show the image with bounding boxes
     #cv2.imshow('Image with Bounding Boxes', img)
 
@@ -166,28 +125,19 @@ def screeninfo():
     for detection in detections.boxes.data.tolist():
         
         x1, y1, x2, y2, score, class_id = detection
-
-        # scorer = round(score, 2)
-        
+        # scorer = round(score, 2)      
         # Get the class name using the class ID
         class_name = class_id_to_name.get(class_id, 'Unknown')  # Default to 'Unknown' if class ID is not found
-
         x1, y1, x2, y2 = int(x1), int(y1), int(x2), int(y2)
-
+        # Crop the screenshot to the size of each element
         element_crop = screenshot_array[ y1 : y2, x1 : x2, :]
-
-
-        x = int(x1+(x2-x1)/2)
-        
-        y = int(y1+(y2-y1)/2)+150
-
-
-
+        # OCR the text within each element
         tdetections = reader.readtext(element_crop)
-
+        
         merged_text = ""
         extracted_text_list = []
 
+        # Join OCR for each element to the element class and location
         for tdetection in tdetections:
             bbbox, text, score = tdetection
 
@@ -195,60 +145,59 @@ def screeninfo():
 
             # Append the extracted text to the list
             extracted_text_list.append(text)
-
+       
         # Merge the extracted text into a single string
         merged_text = ' '.join(extracted_text_list)
-
     
         print ('extracted text:', merged_text)
 
+        # Get the center coordinates for each element 
+        x = int(x1+(x2-x1)/2)       
+        y = int(y1+(y2-y1)/2)+150
+
+        # Append a list for all detected elements complete information
         detections_.append([x, y, class_name, merged_text])
 
+    # print the list of complete elements detected wih their information
     print(detections_)
 
-    # Sort the detections using the custom sorting function
+    # Sort the elements detected asccending based on their y coordiante value 
     detections_.sort(key=custom_sort)
-    
     # Filter out cells with empty merged_text
     filtered_detections = [detection for detection in detections_ if detection[-1] != ""]
 
-    
+    # Get the title of the opened window
+    window_title = driver.title    
+    # insert window title to the list    
     filtered_detections.insert(0, f'Window title is:{window_title}')
-
+    # Get the current coordinate of the mouse
     m, p = pyautogui.position()
-
+    # Inser the current coordinate of mouse to the list
     filtered_detections.insert(0, f'Mouse Position: x={m}, y={p}')
     
-    # Index the sorted detections
+    # Index the sorted detections possible give LLM a id for each element instead of location..
     # indexed_sorted_detections = list(enumerate(filtered_detections))
-
 
     return filtered_detections
 
-
+# Describe the window using vision model
 def showscreen(show):
-
-      
-    swindow_title = driver.title
-
-    print('windowss', swindow_title)
-    
-
+     
     # Wait for the page to load completely
     wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds in this example)
     wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
 
+    # capture sceenshot for window
     capture_window_screenshot()
-  
-    question = show
-    
-    tokenizer = AutoTokenizer.from_pretrained("MILVLG/imp-v1-3b", trust_remote_code=True)
+      
+    # Create a tokenizer for vision model
+    # tokenizer = AutoTokenizer.from_pretrained("MILVLG/imp-v1-3b", trust_remote_code=True)
     # tokenizer.to(device)
 
-    #Set inputs
+    #Set inputs for imp vision model
+    question = show
     text = f"A chat between a blind user who can't see the screen and you the artificial intelligence assistant with vision. As the assistant provide in details the important content information inside window screenshot include main buttons for possible interaction and answer their specific questions. USER: <image>\n{question} ASSISTANT:"
     image = Image.open("./image/wss.png")
-
     input_ids = tokenizer(text, return_tensors='pt').input_ids.to(device)
     image_tensor = model.image_preprocess(image).to(device)
 
@@ -259,120 +208,102 @@ def showscreen(show):
     images=image_tensor,
     use_cache=True)[0]
     
-    # print(tokenizer.decode(output_ids[input_ids.shape[1]:], skip_special_tokens=True).strip())
-
-    img2txt = tokenizer.decode(output_ids[input_ids.shape[1]:], skip_special_tokens=True).strip()
-        
+    # Vision model text response
+    img2txt = tokenizer.decode(output_ids[input_ids.shape[1]:], skip_special_tokens=True).strip()      
     # screen_show = f'Chrome window shows {img2txt}. Here is elements of the with x,y locations and object identification/OCR elements:\n {detections_} \n "Please respond based on the screen information provided above (including OCR results and extracted location)' 
 
     return img2txt
 
-
-
-
+# Get the elements information
 def getelements(order):
-
-      
-    swindow_title = driver.title
-
-    print('windowss', swindow_title)
     
-
     # Wait for the page to load completely
-    wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds in this example)
+    wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds)
     wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
 
-    print('windowss', swindow_title)
-
-    capture_window_screenshot()
-  
-    print('windowss', swindow_title)
-
+    # capture window
+    capture_window_screenshot() 
+    # get the elements
     detections_ = screeninfo()
-   
         
     screen_elements = f'Here are the elements inside the webpage with x,y locations and object identification/OCR content of elements:\n {detections_}' 
 
     return screen_elements
 
-
-
-
-
+# Search google or enter a url and retur the window description and elements to LLM
 def gaddressbar(url_or_search_term):
 
     # Navigate to a URL by typing in the address bar
-
     input_text = url_or_search_term
-
-
     # Check if the input is a valid URL
-    parsed_url = urlparse(input_text)
-    
+    parsed_url = urlparse(input_text) 
+
     if parsed_url.scheme and parsed_url.netloc:
-        # It's a valid URL, so open it with driver.get
-                     
+        # It's a valid URL, so open it with driver.get                   
         driver.get(input_text)
-        
         # Wait for the page to load completely
         wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds in this example)
         wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
 
-        
     else:
 
         # Navigate to Google and perform a search
         google_url = "https://www.google.com"
-        driver.get(google_url)
-        
-
+        driver.get(google_url)      
         # Wait for the page to load completely
         wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds in this example)
         wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[name="q"]')))
-               
-
         search_box = driver.find_element(By.CSS_SELECTOR, '[name="q"]')  # Locate the search box by CSS selector
-        
         time.sleep(1)
-
         search_box.send_keys(input_text)  # Type the input (URL or search term)
-        
         time.sleep(1)
-
         search_box.send_keys(Keys.RETURN)  # Press Enter to initiate the search
-
-        time.sleep(1)
-        
         wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds in this example)
-        wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, '[name="q"]')))
-        
-        
-
-
-    screen_show = showscreen("extract main results shown on the webpage")
-    # screen_show = showscreen("Describe and write information data results shown in the webpage?")
+        wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
+         
+    # Send to vision model to describe the window
+    msg2vision = f'{url_or_search_term}, extract main results shown on the webpage'
+    screen_show = showscreen(msg2vision)
+    # Screen_show = showscreen("Describe and write information data results shown in the webpage?")
+    # Send to elements function to get the elements
     screen_elements = getelements("order")
 
 
     return screen_show, screen_elements
 
+# Open Chrome window and set its diminsions and coordinates
 def ochrome():
 
     # Maximize the browser window
     #driver.maximize_window()
-
     # Set the window size (replace 'width' and 'height' with your desired values)
     driver.set_window_size(480, 800)
-
     # Set the window position (replace 'x' with the horizontal position you want)
-    driver.set_window_position(0, 0)  # For example, position it to the right side of the screen
-
-   
-
+    driver.set_window_position(0, 0)  # For example, position it to the right side of the screen  
     # Wait for the page to load completely
     wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds in this example)
     wait.until(EC.presence_of_element_located((By.TAG_NAME, 'body')))
 
+# Define a custom sorting function to sort by y1 coordinate for elements in asscending order
+def custom_sort(detection):
+    return detection[1]  # Sort based on the y1 coordinate
+
+# execute written code by LLM
+def execute(language, code):   
+
+    # execute a code based on language
+    result = coderexe.execute_code_blocks([(language, code)])
+    
+    # get screen info after executing the code
+    screen_show = showscreen("What information shown in the webpage?")
+    screen_elements = getelements("order")
+    
+    # return coderexe.execute_code_blocks([("sh", script)])
+    # messages = [{"content":code}]
+    
+    return result, f"this is the updated page after code execution {screen_show}, and these are the updated elements of screen {screen_elements}"
+
+# Enter python code to execute
 def exec_python(cell):
     try:
         exec(cell, globals(), locals())
@@ -390,32 +321,21 @@ def exec_python(cell):
             "result": f"Error: {str(e)}",
             "log": None
         }
-    
-# Define a custom sorting function to sort by y1 coordinate
-def custom_sort(detection):
-    return detection[1]  # Sort based on the y1 coordinate
 
-
+# LLM Model and API
 config_list = [
     {
         "model": "gpt-3.5-turbo-1106",
         "api_key": "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"
     }
 ]
-
-
 llm_config={
     "request_timeout": 600,
     "seed": 42,
-    "config_list": config_list,
-    
+    "config_list": config_list,    
 }
 
-
-
-
-
-
+# Agent Planner setting
 planner = autogen.AssistantAgent(
     
     name="planner",
@@ -518,45 +438,7 @@ planner = autogen.AssistantAgent(
 
 )
 
-
-csender = autogen.AssistantAgent(
-    
-    name="planner",
-    
-    human_input_mode="NEVER",
-    
-    llm_config={
-        "seed": 42,  # seed for caching and reproducibility
-        "config_list": config_list,  # a list of OpenAI API configurations
-        "temperature": 0.5,  # temperature for sampling
-        
-    },  # configuration for autogen's enhanced inference API which is compatible with OpenAI API
-    
-)
-
-
-codersender = autogen.UserProxyAgent(
-    name="codersender",
-    human_input_mode="NEVER",
-    
-    # is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
-    code_execution_config=False,
-)
-
-
-coderexe = autogen.UserProxyAgent(
-    name="coderexe",
-    human_input_mode="ALWAYS",
-    # is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
-    max_consecutive_auto_reply=0,
-    code_execution_config={
-        
-        "work_dir": "coding",
-        "use_docker": False,  # set to True or image name like "python:3" to use docker
-    },
-)
-
-
+# user proxy agent settings
 user_proxy = autogen.UserProxyAgent(
     name="user_proxy",
     
@@ -572,41 +454,20 @@ user_proxy = autogen.UserProxyAgent(
     },
 )
 
-
-
-
-
-
-def execute(language, code):   
-
-    # return coderexe.execute_code_blocks([("sh", script)])
-
-    #print('codr here', code)
-    #print('language', language)
-
-    # messages = [{"content":code}]
-
-    result = coderexe.execute_code_blocks([(language, code)])
+# An agent for executing code
+coderexe = autogen.UserProxyAgent(
+    name="coderexe",
+    human_input_mode="ALWAYS",
+    # is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
+    max_consecutive_auto_reply=0,
+    code_execution_config={
+        
+        "work_dir": "coding",
+        "use_docker": False,  # set to True or image name like "python:3" to use docker
+    },
+)
     
-    screen_show = showscreen("What information shown in the webpage?")
-    screen_elements = getelements("order")
-
-    
-    return result, f"this is the updated page after code execution {screen_show}, and these are the updated elements of screen {screen_elements}"
-
-
-
-    # print('after execution', result, output)
-
-    # coderexe.initiate_chat(codersender, message=code)  
-
-    # return coderexe.last_message()["content"]    
-    
-    # return user_proxy.generate_code_execution_reply(code)
-    
-
-
-# register the functions
+# register the functions to user_proxy agent
 user_proxy.register_function(
     function_map={
         "showscreen": showscreen,
@@ -616,33 +477,46 @@ user_proxy.register_function(
     }
 )
 
-
 # message = f'Based on the following information of shown webpage with its elements coordinates, write a python code with pyautgui that will write the name `Husam` inside the element Type Name, then click the Enter button, use middle element click based the required coordinates provided in information: {detections_}'
-message = ""
-
-
 # "what is the weather currently in amman?"
 # "write code to scrape and plot the yearly deaths from car accendents in USA for the last 10 years from wikipedia data"
 # "go to autodraw.com, open the drawing area then draw a complete flower in it, user pyautogui for that" 
 
+# Enter first question or leave empty
+message = ""
 # the assistant receives a message from the user_proxy, which contains the task description
-user_proxy.initiate_chat(
-    
-    
+user_proxy.initiate_chat(   
     planner,
     message=message
     #message="""What are the main political news in the Middle East today?""",
 )
 
-
-
-
-
 input("Press Enter to close the browser...")
 
+# unused agent
+csender = autogen.AssistantAgent(
+    
+    name="planner",
+    
+    human_input_mode="NEVER",
+    
+    llm_config={
+        "seed": 42,  # seed for caching and reproducibility
+        "config_list": config_list,  # a list of OpenAI API configurations
+        "temperature": 0.5,  # temperature for sampling
+        
+    },  # configuration for autogen's enhanced inference API which is compatible with OpenAI API
+    
+)
 
-
-
+# unused agent
+codersender = autogen.UserProxyAgent(
+    name="codersender",
+    human_input_mode="NEVER",
+    
+    # is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
+    code_execution_config=False,
+)
 
 
 

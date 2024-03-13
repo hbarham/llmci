@@ -56,11 +56,12 @@ modely = YOLO('best.pt')
 # Initialize webdriver with default chrome withou user logging to chrome
 driver = webdriver.Chrome()
 # Set the window size (replace 'width' and 'height' with your desired values)
-driver.set_window_size(480, 800)
+# driver.set_window_size(480, 800)
+driver.set_window_size(720, 1280)
 # Set the window position (replace 'x' with the horizontal position you want)
 driver.set_window_position(0, 0)  # For example, position it to the right side of the screen
 # Navigate to Google and perform a search
-google_url = "https://www.google.com"
+google_url = "https://www.google.com/?hl=en"
 driver.get(google_url)
 
 
@@ -248,7 +249,7 @@ def gaddressbar(url_or_search_term):
     else:
 
         # Navigate to Google and perform a search
-        google_url = "https://www.google.com"
+        google_url = "https://www.google.com/?hl=en"
         driver.get(google_url)      
         # Wait for the page to load completely
         wait = WebDriverWait(driver, 10)  # Adjust the timeout (10 seconds in this example)
@@ -492,6 +493,7 @@ user_proxy.initiate_chat(
 )
 
 input("Press Enter to close the browser...")
+
 
 # unused agent
 csender = autogen.AssistantAgent(

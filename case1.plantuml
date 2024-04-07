@@ -1,0 +1,65 @@
+
+
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Sequence.puml
+
+title Multimodal-Vision Framework for LLMCI Sequence Diagram
+
+Person(user, "User", "Provides input and receives output")
+System(llm, "Large Language Model", "Interprets user input, generates instructions for vision model, and provides output to user")
+System(yolo, "YOLO Object Detection", "Identifies and localizes UI elements")
+System(ocr, "EasyOCR", "Extracts text content from UI elements")
+System(imp, "IMP Vision Model", "Provides contextual understanding of UI elements")
+System_Ext(chrome, "Chrome Browser", "Displays the UI and allows for interaction")
+System(capture_window_screenshot, "Capture Window Screenshot", "Takes a screenshot of the current window")
+System(gaddressbar, "GAddress Bar", "Navigates to URLs or searches Google")
+System(auto_execute_code, "Auto Execute Code", "Executes generated PyAutoGUI code")
+activate user
+user -> llm: "Go to this website https://getsitecontrol.com/p/0ewjmxr6 then type message saying you are doing good then click on submit"
+activate llm
+llm -> gaddressbar: "url_or_search_term": "https://getsitecontrol.com/p/0ewjmxr6"
+activate gaddressbar
+gaddressbar -> chrome: "Open website https://getsitecontrol.com/p/0ewjmxr6"
+activate chrome
+chrome -> capture_window_screenshot: "Take screenshot"
+activate capture_window_screenshot
+capture_window_screenshot -> yolo: "Screenshot image"
+activate yolo
+yolo -> ocr: "Bounding boxes of UI elements"
+activate ocr
+ocr -> imp: "Text content of UI elements"
+activate imp
+imp -> llm: "UI information"
+deactivate imp
+llm -> auto_execute_code: "PyAutoGUI code to type message"
+activate auto_execute_code
+auto_execute_code -> chrome: "Type message 'You are doing good'"
+deactivate auto_execute_code
+chrome -> capture_window_screenshot: "Take screenshot"
+activate capture_window_screenshot
+capture_window_screenshot -> yolo: "Screenshot image"
+activate yolo
+yolo -> ocr: "Bounding boxes of UI elements"
+activate ocr
+ocr -> imp: "Text content of UI elements"
+activate imp
+imp -> llm: "UI information"
+deactivate imp
+llm -> auto_execute_code: "PyAutoGUI code to click submit"
+activate auto_execute_code
+auto_execute_code -> chrome: "Click on submit button"
+deactivate auto_execute_code
+chrome -> capture_window_screenshot: "Take screenshot"
+activate capture_window_screenshot
+capture_window_screenshot -> yolo: "Screenshot image"
+activate yolo
+yolo -> ocr: "Bounding boxes of UI elements"
+activate ocr
+ocr -> imp: "Text content of UI elements"
+activate imp
+imp -> llm: "UI information"
+deactivate imp
+llm -> user: "The message 'You are doing good' has been successfully typed in the message box, and the 'Submit' button has been clicked. The feedback has been submitted."
+deactivate llm
+deactivate user
+@enduml

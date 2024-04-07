@@ -2,6 +2,7 @@ import os
 
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 import torch
+from openai import OpenAI
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
@@ -18,6 +19,14 @@ from IPython import get_ipython
 import time
 from urllib.parse import urlparse
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import json
+
+
+OpenAI.api_key = "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"
+GPT_MODEL = "gpt-3.5-turbo-1106"
+
+client = OpenAI()
+
 
 # from autogen import GroupChatManager, GroupChat
 # from sort.sort import sort
@@ -296,9 +305,11 @@ def gaddressbar(url_or_search_term):
     screen_show = showscreen(msg2vision)
     # Screen_show = showscreen("Describe and write information data results shown in the webpage?")
     # Send to elements function to get the elements
-    screen_elements = getelements("order")
+    screen_elements = [getelements("order")]
+    
+    screen_elements.insert(0, screen_show)
 
-    return screen_show, screen_elements
+    return json.dumps(screen_elements)
 
 
 # Open Chrome window and set its diminsions and coordinates
@@ -360,31 +371,10 @@ def exec_python(cell):
         return {"result": f"Error: {str(e)}", "log": None}
 
 
-# LLM Model and API
-config_list = [
-    {
-        "model": "gpt-3.5-turbo-1106",
-        "api_key": "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",
-    }
-]
-llm_config = {
-    "request_timeout": 600,
-    "seed": 42,
-    "config_list": config_list,
-}
-
-# Agent Planner setting
-planner = autogen.AssistantAgent(
-    name="planner",
-    human_input_mode="NEVER",
-    llm_config={
-        "seed": 1,  # seed for caching and reproducibility
-        "config_list": config_list,  # a list of OpenAI API configurations
-        "temperature": 0.2,  # temperature for sampling
-        "frequency_penalty": 0.4,
-        
-        "functions": [
+functions = [
             {
+                "type": "function",
+                "function": {
                 "name": "auto_execute_code",
                 "description": "Use this function to reach your goal by writing code using your coding and language skills. you can write python code (in a python coding block) or shell script (in a sh coding block) for the proxy system to execute it for you.",
                 "parameters": {
@@ -400,9 +390,11 @@ planner = autogen.AssistantAgent(
                         },
                     },
                     "required": ["language", "code"],
-                },
+                },}
             },
             {
+                "type": "function",
+                "function": {
                 "name": "gaddressbar",
                 "description": "Use this function to navigate to a URL, enter complete URL starting with https:// or for google search to be entered in google chrome address bar ",
                 "parameters": {
@@ -414,9 +406,11 @@ planner = autogen.AssistantAgent(
                         }
                     },
                     "required": ["url_or_search_term"],
-                },
+                },}
             },
             {
+                "type": "function",
+                "function": {
                 "name": "showscreen",
                 "description": "Use this function to request any information about what is shown in the screen, it returns content information about what is shown in the chrome window to help you collect information and possible functions/buttons in the page",
                 "parameters": {
@@ -428,9 +422,11 @@ planner = autogen.AssistantAgent(
                         }
                     },
                     "required": ["show"],
-                },
+                },}
             },
             {
+                "type": "function",
+                "function": {
                 "name": "getelements",
                 "description": "Use this function to get elements locations so you can then use them to write python pyautogui lib script to interact with the page click/write etc, view elements of webpage as a list of elements with their x,y locations and content, so you can interact with elements as needed write, (get) to get the elements list",
                 "parameters": {
@@ -442,11 +438,37 @@ planner = autogen.AssistantAgent(
                         }
                     },
                     "required": ["order"],
-                },
+                },}
             },
-        ],
-    },  # configuration for autogen's enhanced inference API which is compatible with OpenAI API
-    system_message="""
+        ]
+
+
+available_functions = {
+        "showscreen": showscreen,
+        "gaddressbar": gaddressbar,
+        "getelements": getelements,
+        "auto_execute_code": execute,
+    }
+
+
+def chat_completion_request(messages, functions=None, function_call='auto', 
+                            model_name=GPT_MODEL):
+    
+    if functions is not None:
+        return client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            tools=functions,
+            tool_choice=function_call)
+    else:
+        return client.chat.completions.create(
+            model=model_name,
+            messages=messages)
+
+
+def run_conversation(user_input, is_log=False):
+
+    system_message= """
                 You are a very helpful assistant for a blind person who cant see the computer screen, you will operate chrome instead of user to perform various types of activities              
                 You can use the provided functions call to help you code and execute code for you and user and feedback result, and to help you navigate URLs and to help you search google which will open a chrome window and search or enter the URL in chrome window. 
                 Use mouse keyboard code input to interact with chrome window elements 
@@ -458,22 +480,47 @@ planner = autogen.AssistantAgent(
                 When you find an answer, verify the answer carefully. Include verifiable evidence in your response if possible.
 
                 Reply TERMINATE when the task is completed.
-            """,
-)
+            """
+    
+    messages = [{"role": "system", "content": system_message},
+                {"role": "user", "content": user_input}]
+    
+    # Call the model to get a response
+    response = chat_completion_request(messages, functions=functions)
+    response_message = response.choices[0].message
+    
+    
+    print(response_message)
+    
+    if is_log:
+        print(response.choices)
+    
+    # check if GPT wanted to call a function
+    if response_message.tool_calls:
+        function_name = response_message.tool_calls[0].function.name
+        function_args = json.loads(response_message.tool_calls[0].function.arguments)
+        
+        # Call the function
+        function_response = available_functions[function_name](**function_args)
+        
+        # Add the response to the conversation
+        messages.append(response_message)
+        messages.append({
+            "role": "tool",
+            "content": function_response,
+            "tool_call_id": response_message.tool_calls[0].id,
+        })
+        
+        print("these are the messages: ",messages)
+        
+        # Call the model again to summarize the results
+        second_response = chat_completion_request(messages)
+        final_message = second_response.choices[0].message.content
+    else:
+        final_message = response_message.content
 
-# user proxy agent settings
-user_proxy = autogen.UserProxyAgent(
-    name="user_proxy",
-    human_input_mode="ALWAYS",
-    max_consecutive_auto_reply=7,
-    # is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
-    # function_map={"showscreen": showscreen(),
-    #                "gaddressbar": gaddressbar()},
-    code_execution_config={
-        "work_dir": "coding",
-        "use_docker": False,  # set to True or image name like "python:3" to use docker
-    },
-)
+    return final_message
+
 
 # An agent for executing code
 coderexe = autogen.UserProxyAgent(
@@ -487,48 +534,16 @@ coderexe = autogen.UserProxyAgent(
     },
 )
 
-# register the functions to user_proxy agent
-user_proxy.register_function(
-    function_map={
-        "showscreen": showscreen,
-        "gaddressbar": gaddressbar,
-        "getelements": getelements,
-        "auto_execute_code": execute,
-    }
-)
+
+print(run_conversation('what is the current tempreture in Amman?'))
+
 
 # message = f'Based on the following information of shown webpage with its elements coordinates, write a python code with pyautgui that will write the name `Husam` inside the element Type Name, then click the Enter button, use middle element click based the required coordinates provided in information: {detections_}'
 # "what is the weather currently in amman?"
 # "write code to scrape and plot the yearly deaths from car accendents in USA for the last 10 years from wikipedia data"
 # "go to autodraw.com, open the drawing area then draw a complete flower in it, user pyautogui for that"
 
-# Enter first question or leave empty
-message = ""
-# the assistant receives a message from the user_proxy, which contains the task description
-user_proxy.initiate_chat(
-    planner,
-    message=message,
-    # message="""What are the main political news in the Middle East today?""",
-)
 
 input("Press Enter to close the browser...")
 
 
-# unused agent
-csender = autogen.AssistantAgent(
-    name="planner",
-    human_input_mode="NEVER",
-    llm_config={
-        "seed": 42,  # seed for caching and reproducibility
-        "config_list": config_list,  # a list of OpenAI API configurations
-        "temperature": 0.5,  # temperature for sampling
-    },  # configuration for autogen's enhanced inference API which is compatible with OpenAI API
-)
-
-# unused agent
-codersender = autogen.UserProxyAgent(
-    name="codersender",
-    human_input_mode="NEVER",
-    # is_termination_msg=lambda x: x.get("content", "").rstrip().endswith("TERMINATE"),
-    code_execution_config=False,
-)

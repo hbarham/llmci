@@ -1,0 +1,33 @@
+
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Multimodal-Vision Framework for LLMCI
+
+Person(user, "User", "Provides input and receives output")
+System(llm, "Large Language Model", "Interprets user input, generates instructions for vision model, and provides output to user")
+System_Boundary(c2, "Visual Models") {
+    System(yolo, "YOLO Object Detection", "Identifies and localizes UI elements")
+    System(ocr, "EasyOCR", "Extracts text content from UI elements")
+    System(imp, "IMP Vision Model", "Provides contextual understanding of UI elements")
+}
+System_Ext(chrome, "Chrome Browser", "Displays the UI and allows for interaction")
+System_Ext(input, "keyboard/Mouse", "Controls keyboard/Mouse")
+System_Boundary(c1, "Functions Call Framework") {
+    System(capture_window_screenshot, "Capture Window Screenshot", "Takes a screenshot of the current window")
+    System(gaddressbar, "GAddress Bar", "Navigates to URLs or searches Google")
+    System(auto_execute_code, "Auto Execute Code", "Executes generated PyAutoGUI code")
+}
+Rel_L(user, llm, "Provides input")
+Rel(c2, llm, "Provides Visual description to LLM")
+Rel(chrome, capture_window_screenshot, "Provides screenshot")
+Rel(capture_window_screenshot, yolo, "Provides screenshot")
+Rel(capture_window_screenshot, imp, "Provides screenshot")
+Rel(yolo, ocr, "Provides bounding boxes")
+Rel_D(llm, c1, "Call functions and generates instructions")
+Rel(gaddressbar, chrome, "Navigates to URLs or searches Google")
+Rel_R(llm, user, "Provides output")
+Rel_D(auto_execute_code, input, "Sends PyAutoGUI Code")
+Rel_L(input, chrome, "Controls mouse/keyboard input")
+SHOW_LEGEND()
+@enduml

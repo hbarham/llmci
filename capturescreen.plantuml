@@ -1,0 +1,33 @@
+
+@startuml
+!includeurl https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+
+title Screen Capture Framework
+
+System(llm, "Large Language Model", "Interprets user input, generates instructions for vision model, and provides output to user")
+System(capture_window_screenshot, "Capture Window Screenshot", "Takes a screenshot of the current window")
+System(getelements, "getlements()", "provides the objects class and location in the screen")
+System(showscreen, "showscreen()", "provides a general description for the screen")
+System(list, "textual spatial location", "combine text with spatial locations, [h, v, object class, text found in element based on OCR]")
+System(combine, "Combine with contextual understanding", "Organize the retrived information from the 3 models and feed them to the LLM")
+
+System_Boundary(c2, "Visual Models") {
+    System(yolo, "YOLO Object Detection", "Identifies and localizes UI elements")
+    System(ocr, "EasyOCR", "Extracts text content from UI elements")
+    System(imp, "IMP Vision Model", "Provides contextual understanding of UI elements")
+}
+System_Ext(chrome, "Chrome Browser", "Displays the UI and allows for interaction")
+
+Rel(combine, llm, "Provide Visual description to LLM")
+Rel_L(chrome, capture_window_screenshot, "Provide screenshot")
+Rel(capture_window_screenshot, getelements, "Run object identification on the window screenshot")
+Rel(capture_window_screenshot, showscreen, "Run descriptive visual model on the screenshot, prompted with an LLM querry")
+Rel(showscreen, imp, "provide imp with LLM prompt")
+Rel(getelements, yolo, "run object identification then OCR")
+Rel(yolo, ocr, "Provide bounding boxes")
+Rel(yolo, list, "Provide identified objects")
+Rel(ocr, list, "Provide extracted text for objects")
+Rel_R(list, combine, "Provide list of objects")
+Rel(imp, combine, "Provide contextual understanding")
+SHOW_LEGEND()
+@enduml

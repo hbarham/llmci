@@ -346,11 +346,8 @@ def execute(language, code):
     # return coderexe.execute_code_blocks([("sh", script)])
     # messages = [{"content":code}]
 
-    return (
-        result,
-        f"this is the updated page after code execution {screen_show}, and these are the updated elements of screen {screen_elements}",
-    )
-
+    return json.dumps(f"this is the result of code execution:{result}, and this is the updated page after code execution {screen_show}, and these are the updated elements of screen {screen_elements}")
+    
 
 # Enter python code to execute
 def exec_python(cell):
@@ -466,30 +463,13 @@ def chat_completion_request(messages, functions=None, function_call='auto',
             messages=messages)
 
 
-def run_conversation(user_input, is_log=False):
-
-    system_message= """
-                You are a very helpful assistant for a blind person who cant see the computer screen, you will operate chrome instead of user to perform various types of activities              
-                You can use the provided functions call to help you code and execute code for you and user and feedback result, and to help you navigate URLs and to help you search google which will open a chrome window and search or enter the URL in chrome window. 
-                Use mouse keyboard code input to interact with chrome window elements 
-                chrome window list of object detection of elements on chrome window [h, v, text found in element based on OCR], window size 480x800, the results of elements info can be incomplete, interpretate elements based on content/location to understand their functionality and information in them so to operate web, Iterate again and use a different approach if you failed to achieve what you want.
-                You can ask for information about what is in the page by using the showscreen function and ask for what are you looking for in the screen.
-                Solve the tasks step by step to accomplish a project if you need to. If a plan is not provided, explain your plan first. Be clear which step uses code, and which step uses your language skill.
-                If you want to save a file in the system directory before executing for your project, put # filename: <filename> inside the code block as the first line. Don't include multiple code blocks in one response. Do not ask users to copy and paste the result. Instead, use 'print' function for the output when relevant or use file output. Check the execution result returned by the system.
-                If the result indicates there is an error, fix the error and output the code again. Suggest the full code instead of partial code or code changes. If the error can't be fixed or if the task is not solved even after the code is executed successfully, analyze the problem, revisit your assumption, collect additional info you need using search/browse/showscreen/getelements functions, and think of a different approach to try.
-                When you find an answer, verify the answer carefully. Include verifiable evidence in your response if possible.
-
-                Reply TERMINATE when the task is completed.
-            """
-    
-    messages = [{"role": "system", "content": system_message},
-                {"role": "user", "content": user_input}]
+def run_conversation(messages, is_log=False):
     
     # Call the model to get a response
     response = chat_completion_request(messages, functions=functions)
+    
     response_message = response.choices[0].message
-    
-    
+        
     print(response_message)
     
     if is_log:
@@ -511,16 +491,54 @@ def run_conversation(user_input, is_log=False):
             "tool_call_id": response_message.tool_calls[0].id,
         })
         
-        print("these are the messages: ",messages)
+        print("function response: ",function_response)
         
         # Call the model again to summarize the results
         second_response = chat_completion_request(messages)
+        
         final_message = second_response.choices[0].message.content
     else:
         final_message = response_message.content
 
     return final_message
 
+
+def run_chat(user_input="Hi"):
+       
+    system_message= """
+            You are a very helpful assistant for a blind person who cant see the computer screen, you will operate chrome instead of user to perform various types of activities              
+            You can use the provided functions call to help you code and execute code for you and user and feedback result, and to help you navigate URLs and to help you search google which will open a chrome window and search or enter the URL in chrome window. 
+            Use mouse keyboard code input to interact with chrome window elements 
+            chrome window list of object detection of elements on chrome window [h, v, text found in element based on OCR], window size 480x800, the results of elements info can be incomplete, interpretate elements based on content/location to understand their functionality and information in them so to operate web, Iterate again and use a different approach if you failed to achieve what you want.
+            You can ask for information about what is in the page by using the showscreen function and ask for what are you looking for in the screen.
+            Solve the tasks step by step to accomplish a project if you need to. If a plan is not provided, explain your plan first. Be clear which step uses code, and which step uses your language skill.
+            If you want to save a file in the system directory before executing for your project, put # filename: <filename> inside the code block as the first line. Don't include multiple code blocks in one response. Do not ask users to copy and paste the result. Instead, use 'print' function for the output when relevant or use file output. Check the execution result returned by the system.
+            If the result indicates there is an error, fix the error and output the code again. Suggest the full code instead of partial code or code changes. If the error can't be fixed or if the task is not solved even after the code is executed successfully, analyze the problem, revisit your assumption, collect additional info you need using search/browse/showscreen/getelements functions, and think of a different approach to try.
+            When you find an answer, verify the answer carefully. Include verifiable evidence in your response if possible.
+
+            Reply TERMINATE when the task is completed.
+        """
+    
+    messages = [{"role": "system", "content": system_message}]
+        
+    i = 0
+    while i <= 5:
+        i = i +1
+        
+        user_input = input("Write request or press enter: ")
+        
+        user_input = {"role": "user", "content": user_input}
+        
+        messages.append(user_input)
+        
+        response = run_conversation(messages)
+        
+        print(response)
+        
+        assistant_response = {"role": "assistant", "content": response}       
+        
+        messages.append(assistant_response)
+         
 
 # An agent for executing code
 coderexe = autogen.UserProxyAgent(
@@ -535,8 +553,7 @@ coderexe = autogen.UserProxyAgent(
 )
 
 
-print(run_conversation('what is the current tempreture in Amman?'))
-
+run_chat()
 
 # message = f'Based on the following information of shown webpage with its elements coordinates, write a python code with pyautgui that will write the name `Husam` inside the element Type Name, then click the Enter button, use middle element click based the required coordinates provided in information: {detections_}'
 # "what is the weather currently in amman?"

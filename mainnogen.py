@@ -448,7 +448,7 @@ available_functions = {
     }
 
 
-def chat_completion_request(messages, functions=None, function_call='auto', 
+def chat_completion_request(messages, functions=functions, function_call='auto', 
                             model_name=GPT_MODEL):
     
     if functions is not None:
@@ -465,43 +465,71 @@ def chat_completion_request(messages, functions=None, function_call='auto',
 
 def run_conversation(messages, is_log=False):
     
-    # Call the model to get a response
-    response = chat_completion_request(messages, functions=functions)
+    messages_temp = messages
     
-    response_message = response.choices[0].message
+    while True:
+        # Call the model to get a response
+        response = chat_completion_request(messages_temp, functions=functions)
+        response_message = response.choices[0].message
+
         
-    print(response_message)
-    
-    if is_log:
-        print(response.choices)
-    
-    # check if GPT wanted to call a function
-    if response_message.tool_calls:
-        function_name = response_message.tool_calls[0].function.name
-        function_args = json.loads(response_message.tool_calls[0].function.arguments)
-        
-        # Call the function
-        function_response = available_functions[function_name](**function_args)
-        
-        # Add the response to the conversation
-        messages.append(response_message)
-        messages.append({
-            "role": "tool",
-            "content": function_response,
-            "tool_call_id": response_message.tool_calls[0].id,
-        })
-        
-        print("function response: ",function_response)
-        
-        # Call the model again to summarize the results
-        second_response = chat_completion_request(messages)
-        
-        final_message = second_response.choices[0].message.content
-    else:
-        final_message = response_message.content
+        if is_log:
+            print(response.choices)
+
+        # check if GPT wanted to call a function
+        if response_message.tool_calls:
+            function_name = response_message.tool_calls[0].function.name
+            function_args = json.loads(response_message.tool_calls[0].function.arguments)
+
+            # Call the function
+            function_response = available_functions[function_name](**function_args)
+
+            # Add the response to the temp messages
+            messages_temp.append(response_message)
+            messages_temp.append({
+                "role": "tool",
+                "content": function_response,
+                "tool_call_id": response_message.tool_calls[0].id,
+            })
+
+            last_tool_id = response_message.tool_calls[0].id
+
+            # print("function response: ", function_response)
+
+            # print("Response Message: ", response_message)
+
+        else:
+            # No tool_calls, break the loop
+            # Add the last function response to the conversation
+            """            
+            messages.append({
+                "role": "tool",
+                "content": function_response,
+                "tool_call_id": last_tool_id,
+            })
+            # at the last model response to the conversation
+            messages.append(response_message)
+            """
+            
+            break
+
+    # Use the last response obtained
+    final_message = response_message.content
 
     return final_message
 
+
+def filter_messages(lst, prefix):
+    
+    # Find indices of items starting with 'ChatCompletionMessage' (if they are dictionaries)
+    indices_to_remove = [i for i, item in enumerate(lst) if isinstance(item, dict) and prefix in item.get('content', '')]
+
+    # Remove all items except the last one starting with 'ChatCompletionMessage'
+    if len(indices_to_remove) > 1:
+        del lst[indices_to_remove[:-1]]
+
+    return lst
+   
 
 def run_chat(user_input="Hi"):
        
@@ -524,20 +552,24 @@ def run_chat(user_input="Hi"):
     i = 0
     while i <= 5:
         i = i +1
+              
+        filtered_messages = filter_messages(messages, "ChatCompletionMessage")
+
+        print("This is the messages list:\n", filtered_messages)
         
         user_input = input("Write request or press enter: ")
         
         user_input = {"role": "user", "content": user_input}
+                        
+        filtered_messages.append(user_input)
         
-        messages.append(user_input)
-        
-        response = run_conversation(messages)
+        response = run_conversation(filtered_messages)
         
         print(response)
         
         assistant_response = {"role": "assistant", "content": response}       
         
-        messages.append(assistant_response)
+        filtered_messages.append(assistant_response)
          
 
 # An agent for executing code

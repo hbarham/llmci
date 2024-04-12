@@ -456,16 +456,19 @@ def chat_completion_request(messages, functions=functions, function_call='auto',
             model=model_name,
             messages=messages,
             tools=functions,
-            tool_choice=function_call)
+            tool_choice=function_call,
+            temperature=0.7,
+            frequency_penalty=0.3
+            )
     else:
         return client.chat.completions.create(
             model=model_name,
             messages=messages)
 
 
-def run_conversation(messages, is_log=False):
+def run_conversation(temp_m, is_log=False):
     
-    messages_temp = messages
+    messages_temp = temp_m
     
     while True:
         # Call the model to get a response
@@ -484,8 +487,17 @@ def run_conversation(messages, is_log=False):
             # Call the function
             function_response = available_functions[function_name](**function_args)
 
+            
+            # print("the response message:", type(response_message) ,response_message)
+                       
             # Add the response to the temp messages
+            
+            messages_temp = [item for item in temp_m if "ChatCompletionMessage" not in str(item)]
+            
+            messages_temp = [item for item in messages_temp if item.get('role') != 'tool']
+                                                
             messages_temp.append(response_message)
+                        
             messages_temp.append({
                 "role": "tool",
                 "content": function_response,
@@ -496,39 +508,64 @@ def run_conversation(messages, is_log=False):
 
             # print("function response: ", function_response)
 
-            # print("Response Message: ", response_message)
+            # print("Response Message temp: ", response_message)
+
+            
 
         else:
             # No tool_calls, break the loop
             # Add the last function response to the conversation
-            """            
-            messages.append({
-                "role": "tool",
-                "content": function_response,
-                "tool_call_id": last_tool_id,
-            })
+            
+                        
+            # temp_m.pop(-1)
+                        
+            # del temp_m[-2:]
+            
+            # print("the temp:",temp_m)
+            
+            
+
+            
+            
+            # print("last messages: ", f_messages)
+                               
+            
+            # print("this is the last tool dict:", l_tool)
+            
             # at the last model response to the conversation
-            messages.append(response_message)
-            """
+            
+            # print("function response: ", function_response)
+            
+            # print("Response Message: ", response_message)
+            
+            # print("Response Message content: ", response_message.content)            
+            
+            assistant_response = {"role": "assistant", "content": response_message.content}       
+            
+            messages_temp.append(assistant_response)
+                                
+            # print("this is the last assistant response dict:", assistant_response)
+            
+            # c_messages.append(assistant_response)
+            
+            # print("these are the c_messages:", c_messages)
+            
             
             break
 
     # Use the last response obtained
-    final_message = response_message.content
+    # final_message = response_message.content
 
-    return final_message
+    return messages_temp
 
 
-def filter_messages(lst, prefix):
+def filter_messages(c_messages):
     
-    # Find indices of items starting with 'ChatCompletionMessage' (if they are dictionaries)
-    indices_to_remove = [i for i, item in enumerate(lst) if isinstance(item, dict) and prefix in item.get('content', '')]
-
-    # Remove all items except the last one starting with 'ChatCompletionMessage'
-    if len(indices_to_remove) > 1:
-        del lst[indices_to_remove[:-1]]
-
-    return lst
+    tool_indices = [i for i, msg in enumerate(c_messages) if isinstance(msg, dict) and msg.get('role') == 'tool']
+    if len(tool_indices) > 1:
+        # Keep the last tool dictionary and remove the rest
+        c_messages = [msg for i, msg in enumerate(c_messages) if i != tool_indices[-1]]
+    return c_messages
    
 
 def run_chat(user_input="Hi"):
@@ -547,29 +584,32 @@ def run_chat(user_input="Hi"):
             Reply TERMINATE when the task is completed.
         """
     
-    messages = [{"role": "system", "content": system_message}]
+    c_messages = [{"role": "system", "content": system_message}]
         
     i = 0
     while i <= 5:
         i = i +1
               
-        filtered_messages = filter_messages(messages, "ChatCompletionMessage")
+        # filtered_messages = filter_messages(messages, "ChatCompletionMessage")
 
-        print("This is the messages list:\n", filtered_messages)
+        # print("This is the messages list:\n", messages)
         
         user_input = input("Write request or press enter: ")
         
         user_input = {"role": "user", "content": user_input}
                         
-        filtered_messages.append(user_input)
+        c_messages.append(user_input)
+                
+        c_messages = run_conversation(c_messages)
         
-        response = run_conversation(filtered_messages)
+        # print("this is the last tool dict:", l_tool)        
         
-        print(response)
+        # print("this is the last assistant response dict:", assistant_response)
         
-        assistant_response = {"role": "assistant", "content": response}       
+        # c_messages = filter_messages(c_messages)
         
-        filtered_messages.append(assistant_response)
+        print(c_messages)
+        
          
 
 # An agent for executing code
